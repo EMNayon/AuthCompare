@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authentication vs Authorization — Checkpoint Explainer</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B0F19;
+    --panel:#121826;
+    --panel-2:#171F30;
+    --line:#242E43;
+    --text:#E9ECF4;
+    --muted:#8A93AA;
+    --auth-blue:#4C8DFF;
+    --auth-blue-dim:#294A7D;
+    --authz-gold:#F2B134;
+    --authz-gold-dim:#7A5A19;
+    --good:#3ECF8E;
+    --bad:#FF6B6B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, rgba(76,141,255,0.10), transparent 40%),
+      radial-gradient(circle at 85% 10%, rgba(242,177,52,0.09), transparent 40%),
+      var(--ink);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .muted{color:var(--muted);}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    font-size:.72rem;
+    color:var(--muted);
+  }
+
+  /* ===== Top bar ===== */
+  .topbar{
+    border-bottom:1px solid var(--line);
+    background:rgba(11,15,25,.85);
+    backdrop-filter:blur(6px);
+    position:sticky;top:0;z-index:20;
+  }
+  .badge-pill{
+    border:1px solid var(--line);
+    border-radius:999px;
+    padding:.3rem .8rem;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.72rem;
+    color:var(--muted);
+  }
+
+  /* ===== Hero ===== */
+  .hero-title{
+    font-size:clamp(2.1rem, 4.5vw, 3.6rem);
+    font-weight:700;
+    line-height:1.08;
+    letter-spacing:-.01em;
+  }
+  .hero-title .accent-a{color:var(--auth-blue);}
+  .hero-title .accent-z{color:var(--authz-gold);}
+
+  /* ===== Checkpoint diagram ===== */
+  .checkpoint-wrap{
+    border:1px solid var(--line);
+    border-radius:18px;
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    padding:2.2rem 1.2rem;
+    overflow-x:auto;
+  }
+  .gate{
+    flex:1 1 0;
+    min-width:190px;
+    border-radius:14px;
+    padding:1.1rem 1rem;
+    text-align:center;
+    position:relative;
+  }
+  .gate-auth{
+    border:1.5px solid var(--auth-blue-dim);
+    background:rgba(76,141,255,.07);
+  }
+  .gate-authz{
+    border:1.5px solid var(--authz-gold-dim);
+    background:rgba(242,177,52,.07);
+  }
+  .gate-icon{
+    width:52px;height:52px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    margin:0 auto .6rem auto;
+    font-size:1.4rem;
+  }
+  .gate-auth .gate-icon{background:rgba(76,141,255,.15); color:var(--auth-blue); border:1px solid var(--auth-blue);}
+  .gate-authz .gate-icon{background:rgba(242,177,52,.15); color:var(--authz-gold); border:1px solid var(--authz-gold);}
+  .gate-q{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:1.02rem;}
+  .flow-arrow{
+    display:flex;align-items:center;justify-content:center;
+    color:var(--muted); font-size:1.4rem; min-width:34px;
+  }
+  .node-pill{
+    border:1px dashed var(--line);
+    border-radius:12px;
+    padding:.7rem .9rem;
+    text-align:center;
+    min-width:110px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.78rem;
+    color:var(--muted);
+  }
+
+  /* ===== Comparison cards ===== */
+  .concept-card{
+    border-radius:16px;
+    padding:1.6rem;
+    height:100%;
+    background:var(--panel);
+    border:1px solid var(--line);
+    transition:transform .18s ease, border-color .18s ease;
+  }
+  .concept-card:hover{transform:translateY(-3px);}
+  .concept-card.auth{border-top:3px solid var(--auth-blue);}
+  .concept-card.authz{border-top:3px solid var(--authz-gold);}
+  .concept-card h3{font-family:'Space Grotesk',sans-serif;font-weight:600;}
+  .concept-card .qmark{
+    font-family:'JetBrains Mono',monospace;
+    font-size:.92rem;
+    padding:.35rem .7rem;
+    border-radius:8px;
+    display:inline-block;
+    margin-bottom:.9rem;
+  }
+  .concept-card.auth .qmark{background:rgba(76,141,255,.12); color:var(--auth-blue);}
+  .concept-card.authz .qmark{background:rgba(242,177,52,.12); color:var(--authz-gold);}
+  .concept-card ul{padding-left:1.1rem; margin-bottom:0;}
+  .concept-card li{margin-bottom:.4rem; color:#C7CCDA; font-size:.94rem;}
+
+  /* ===== Table ===== */
+  .table-wrap{
+    border:1px solid var(--line);
+    border-radius:16px;
+    overflow:hidden;
+  }
+  table.cmp{width:100%; border-collapse:collapse; margin-bottom:0;}
+  table.cmp thead th{
+    background:var(--panel-2);
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    font-size:.86rem;
+    padding:.85rem 1rem;
+    border-bottom:1px solid var(--line);
+  }
+  table.cmp th.col-auth{color:var(--auth-blue);}
+  table.cmp th.col-authz{color:var(--authz-gold);}
+  table.cmp td{
+    padding:.8rem 1rem;
+    border-bottom:1px solid var(--line);
+    font-size:.88rem;
+    color:#D3D8E4;
+    vertical-align:top;
+  }
+  table.cmp tr:last-child td{border-bottom:none;}
+  table.cmp td.label{color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:.76rem; white-space:nowrap;}
+
+  /* ===== Hotel analogy ===== */
+  .analogy-card{
+    border:1px solid var(--line);
+    border-radius:16px;
+    background:var(--panel);
+    padding:1.4rem;
+    height:100%;
+  }
+  .analogy-icon{font-size:1.8rem;}
+
+  /* ===== HTTP status code chips ===== */
+  .status-chip{
+    display:inline-flex;align-items:center;gap:.5rem;
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    padding:.45rem .9rem;
+    border-radius:8px;
+    font-size:.95rem;
+  }
+  .status-401{background:rgba(76,141,255,.14); color:var(--auth-blue); border:1px solid var(--auth-blue-dim);}
+  .status-403{background:rgba(242,177,52,.14); color:var(--authz-gold); border:1px solid var(--authz-gold-dim);}
+
+  .code-block{
+    background:#0A0E17;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:1rem 1.2rem;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.82rem;
+    color:#B7D3FF;
+    overflow-x:auto;
+    white-space:pre;
+  }
+  .code-block .c-key{color:var(--authz-gold);}
+  .code-block .c-str{color:#9EE6A0;}
+  .code-block .c-cmt{color:var(--muted);}
+
+  /* ===== Tips ===== */
+  .tip-card{
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:1.1rem 1.2rem;
+    background:var(--panel);
+    height:100%;
+  }
+  .tip-num{
+    font-family:'JetBrains Mono',monospace;
+    color:var(--muted);
+    font-size:.78rem;
+  }
+
+  section{scroll-margin-top:80px;}
+  ::selection{background:var(--auth-blue-dim); color:#fff;}
+
+  @media (max-width:767px){
+    .checkpoint-flow{flex-direction:column;}
+    .flow-arrow{transform:rotate(90deg); min-height:24px;}
+  }
+
+  /* ===== Hotel Dynamic Visual Simulator ===== */
+  .hotel-sim-wrap{
+    border:1px solid var(--line);
+    border-radius:20px;
+    background:linear-gradient(180deg, #101623, #0A0E17);
+    padding:2rem;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+    position:relative;
+    overflow:hidden;
+    margin-top:2.5rem;
+  }
+  .hotel-sim-wrap::before{
+    content:'';
+    position:absolute;
+    top:-50%; left:-50%; width:200%; height:200%;
+    background:radial-gradient(circle at 50% 50%, rgba(76,141,255,0.06), rgba(242,177,52,0.04), transparent 60%);
+    pointer-events:none;
+  }
+  .sim-persona-btn{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:.6rem 1.1rem;
+    border-radius:12px;
+    font-size:.88rem;
+    font-weight:500;
+    transition:all .25s cubic-bezier(0.2,0.8,0.2,1);
+    display:inline-flex;
+    align-items:center;
+    gap:.5rem;
+    cursor:pointer;
+    user-select:none;
+  }
+  .sim-persona-btn:hover{
+    border-color:var(--auth-blue);
+    transform:translateY(-2px);
+    background:rgba(76,141,255,.08);
+  }
+  .sim-persona-btn.active{
+    background:linear-gradient(135deg, rgba(76,141,255,.25), rgba(41,74,125,.4));
+    border-color:var(--auth-blue);
+    color:#fff;
+    box-shadow:0 0 20px rgba(76,141,255,.3);
+    transform:scale(1.02);
+  }
+  .sim-stage-box{
+    background:rgba(18,24,38,0.7);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:1.4rem;
+    height:100%;
+    position:relative;
+    transition:all .35s ease;
+    backdrop-filter:blur(10px);
+  }
+  .sim-stage-box.active-stage{
+    border-color:var(--auth-blue);
+    box-shadow:0 0 25px rgba(76,141,255,.22);
+    background:rgba(23,31,48,0.9);
+  }
+  .sim-stage-box.active-stage-authz{
+    border-color:var(--authz-gold);
+    box-shadow:0 0 25px rgba(242,177,52,.22);
+    background:rgba(23,31,48,0.9);
+  }
+  .sim-door{
+    background:#111724;
+    border:1.5px solid var(--line);
+    border-radius:14px;
+    padding:1.1rem .8rem;
+    text-align:center;
+    transition:all .3s cubic-bezier(.34,1.56,.64,1);
+    position:relative;
+    overflow:hidden;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .sim-door .door-icon{
+    font-size:2.4rem;
+    margin-bottom:.5rem;
+    transition:transform .3s ease;
+  }
+  .sim-door.door-open{
+    border-color:var(--good);
+    background:radial-gradient(circle at center, rgba(62,207,142,.18), rgba(18,24,38,0.8));
+    transform:scale(1.05);
+    box-shadow:0 8px 30px rgba(62,207,142,.25);
+  }
+  .sim-door.door-open .door-icon{
+    transform:scale(1.2) translateY(-3px);
+  }
+  .sim-door.door-denied{
+    border-color:var(--bad);
+    background:radial-gradient(circle at center, rgba(255,107,107,.18), rgba(18,24,38,0.8));
+    animation: doorShake 0.5s ease;
+  }
+  @keyframes doorShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+  }
+  .sim-keycard{
+    background:linear-gradient(135deg, #1E293B, #0F172A);
+    border:1.5px solid var(--authz-gold);
+    border-radius:14px;
+    padding:1rem;
+    color:#fff;
+    box-shadow:0 6px 20px rgba(242,177,52,.2);
+    position:relative;
+    overflow:hidden;
+    transition:all .3s ease;
+  }
+  .sim-keycard::after{
+    content:'RFID CHIP · SECURE';
+    position:absolute;
+    bottom:6px; right:10px;
+    font-size:0.58rem;
+    font-family:'JetBrains Mono',monospace;
+    color:rgba(242,177,52,0.5);
+    letter-spacing:1px;
+  }
+  .sim-log-console{
+    background:#06090F;
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:1rem 1.2rem;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.84rem;
+    height:180px;
+    overflow-y:auto;
+    box-shadow:inset 0 2px 10px rgba(0,0,0,0.6);
+  }
+  .sim-log-item{
+    margin-bottom:.5rem;
+    border-left:3px solid var(--line);
+    padding-left:.8rem;
+    animation: fadeInLog .3s ease;
+    line-height:1.4;
+  }
+  .sim-log-item.log-auth{border-color:var(--auth-blue); color:#A5B4FC;}
+  .sim-log-item.log-authz-success{border-color:var(--good); color:#86EFAC;}
+  .sim-log-item.log-authz-fail{border-color:var(--bad); color:#FCA5A5;}
+  .sim-log-item.log-info{border-color:var(--authz-gold); color:#FDE047;}
+  .sim-log-item.log-warn{border-color:#F97316; color:#FDBA74;}
+  @keyframes fadeInLog {
+    from { opacity:0; transform:translateX(-6px); }
+    to { opacity:1; transform:translateX(0); }
+  }
+  .sim-status-badge{
+    font-size:.76rem;
+    padding:.3rem .7rem;
+    border-radius:8px;
+    font-family:'JetBrains Mono',monospace;
+    font-weight:600;
+    display:inline-block;
+  }
+  .sim-progress-bar{
+    height:6px;
+    background:var(--line);
+    border-radius:3px;
+    overflow:hidden;
+    margin-top:14px;
+  }
+  .sim-progress-fill{
+    height:100%;
+    background:linear-gradient(90deg, var(--auth-blue), var(--good), var(--authz-gold));
+    width:0%;
+    transition:width .4s ease;
+  }
+  .sim-door-chip{
+    font-size:.7rem;
+    font-family:'JetBrains Mono',monospace;
+    padding:.25rem .5rem;
+    border-radius:6px;
+    margin-top:.6rem;
+    display:block;
+    font-weight:600;
+  }
+  .sim-door-chip.chip-locked{background:rgba(138,147,170,.15); color:var(--muted);}
+  .sim-door-chip.chip-granted{background:rgba(62,207,142,.2); color:var(--good); border:1px solid rgba(62,207,142,.4);}
+  .sim-door-chip.chip-denied{background:rgba(255,107,107,.2); color:var(--bad); border:1px solid rgba(255,107,107,.4);}
+  .pulse-indicator {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background-color: var(--good);
+    margin-right: 6px;
+    box-shadow: 0 0 8px var(--good);
+    animation: pulseGlow 1.5s infinite;
+  }
+  @keyframes pulseGlow {
+    0% { transform: scale(0.95); opacity: 0.7; }
+    50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px var(--good); }
+    100% { transform: scale(0.95); opacity: 0.7; }
+  }
+
+  /* ===== Navigation Tabs ===== */
+  .nav-tab-btn{
+    background:transparent;
+    border:none;
+    color:var(--muted);
+    padding:.48rem 1.1rem;
+    border-radius:10px;
+    font-family:'Space Grotesk',sans-serif;
+    font-size:.88rem;
+    font-weight:600;
+    transition:all .25s ease;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:.4rem;
+  }
+  .nav-tab-btn:hover{
+    color:var(--text);
+    background:rgba(255,255,255,.05);
+  }
+  .nav-tab-btn.active{
+    background:linear-gradient(135deg, var(--auth-blue), var(--auth-blue-dim));
+    color:#fff;
+    box-shadow:0 0 18px rgba(76,141,255,.35);
+  }
+  .tab-pane-view{
+    animation: fadeInTab .35s ease;
+  }
+  @keyframes fadeInTab {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<nav class="topbar py-2">
+  <div class="container d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <span class="display fw-semibold" style="font-size:1.05rem;">🔐 Auth<span style="color:var(--muted);">Compare</span></span>
+    
+    <!-- NAVIGATION TABS -->
+    <div class="d-flex align-items-center gap-2 p-1" style="background:var(--panel); border:1px solid var(--line); border-radius:12px;">
+      <button class="nav-tab-btn active" data-target="view-guide">📖 মূল কনসেপ্ট ও গাইড</button>
+      <button class="nav-tab-btn" data-target="view-sim">🏨 লাইভ ভিজ্যুয়াল সিমুলেটর</button>
+    </div>
+
+    <span class="badge-pill d-none d-md-inline">AuthN <span style="color:var(--auth-blue)">●</span> vs AuthZ <span style="color:var(--authz-gold)">●</span></span>
+  </div>
+</nav>
+
+<!-- TAB 1: GUIDE VIEW -->
+<div id="view-guide" class="tab-pane-view">
+
+<!-- HERO -->
+<header class="container py-5">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-7">
+      <p class="eyebrow mb-2">Security fundamentals · beginner → advanced</p>
+      <h1 class="hero-title mb-3">
+        <span class="accent-a">Authentication</span> বলছে "তুমি কে?"<br>
+        <span class="accent-z">Authorization</span> বলছে "তুমি কী করতে পারো?"
+      </h1>
+      <p class="muted fs-6 mb-0" style="max-width:560px;">
+        দুইটা শব্দ প্রায় একই রকম শোনায়, কিন্তু system security-তে এদের role সম্পূর্ণ আলাদা।
+        নিচের checkpoint diagram, comparison table আর real-world analogy দিয়ে concept টা একদম clear হয়ে যাবে।
+      </p>
+    </div>
+    <div class="col-lg-5">
+      <div class="d-flex flex-column gap-2">
+        <div class="d-flex align-items-center gap-2 p-3" style="background:var(--panel);border:1px solid var(--line);border-radius:12px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--auth-blue);display:inline-block;"></span>
+          <span class="mono muted">AuthN → identity verify → login screen, password, OTP, biometric</span>
+        </div>
+        <div class="d-flex align-items-center gap-2 p-3" style="background:var(--panel);border:1px solid var(--line);border-radius:12px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--authz-gold);display:inline-block;"></span>
+          <span class="mono muted">AuthZ → permission check → role, scope, access rule</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- CHECKPOINT DIAGRAM -->
+<section class="container mb-5">
+  <div class="checkpoint-wrap">
+    <p class="eyebrow text-center mb-4">The checkpoint flow</p>
+    <div class="d-flex checkpoint-flow align-items-stretch gap-2 flex-wrap flex-lg-nowrap">
+      <div class="node-pill align-self-center">👤<br>User<br><span style="color:#C7CCDA">login attempt</span></div>
+      <div class="flow-arrow">→</div>
+
+      <div class="gate gate-auth">
+        <div class="gate-icon">🪪</div>
+        <div class="gate-q">Gate 1 — Authentication</div>
+        <div class="mono muted mt-1" style="font-size:.75rem;">Who are you?</div>
+        <div class="mt-2" style="font-size:.8rem;color:#C7CCDA;">password · OTP · fingerprint · SSO</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="gate gate-authz">
+        <div class="gate-icon">🗝️</div>
+        <div class="gate-q">Gate 2 — Authorization</div>
+        <div class="mono muted mt-1" style="font-size:.75rem;">What can you access?</div>
+        <div class="mt-2" style="font-size:.8rem;color:#C7CCDA;">role · permission · policy · scope</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="node-pill align-self-center">📁<br>Resource<br><span style="color:var(--good)">access granted</span></div>
+    </div>
+    <p class="text-center muted mt-4 mb-0 mono" style="font-size:.78rem;">
+      Rule: Authentication সবসময় Authorization-এর আগে ঘটে — identity confirm না হলে permission check করার মানেই নেই।
+    </p>
+  </div>
+</section>
+
+<!-- CONCEPT CARDS -->
+<section class="container mb-5">
+  <div class="row g-4">
+    <div class="col-md-6">
+      <div class="concept-card auth">
+        <span class="qmark">"তুমি কে?"</span>
+        <h3 class="mb-3">Authentication (AuthN)</h3>
+        <ul>
+          <li><strong>কাজ:</strong> ব্যবহারকারীর identity verify করা</li>
+          <li><strong>ঘটে:</strong> login-এর সময়, সবার প্রথমে</li>
+          <li><strong>Data লাগে:</strong> credentials — password, OTP, biometric, security key</li>
+          <li><strong>Fail হলে:</strong> HTTP <span class="mono">401 Unauthorized</span></li>
+          <li><strong>Result:</strong> একটা verified session বা token (যেমন JWT)</li>
+          <li><strong>উদাহরণ:</strong> Gmail-এ email + password দিয়ে login করা, বা fingerprint দিয়ে phone unlock</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="concept-card authz">
+        <span class="qmark">"তুমি কী করতে পারো?"</span>
+        <h3 class="mb-3">Authorization (AuthZ)</h3>
+        <ul>
+          <li><strong>কাজ:</strong> verified user-এর permission/access check করা</li>
+          <li><strong>ঘটে:</strong> authentication-এর পরে, প্রতিটা action-এ</li>
+          <li><strong>Data লাগে:</strong> role, permission list, policy, scope</li>
+          <li><strong>Fail হলে:</strong> HTTP <span class="mono">403 Forbidden</span></li>
+          <li><strong>Result:</strong> নির্দিষ্ট resource access allow/deny হওয়া</li>
+          <li><strong>উদাহরণ:</strong> Google Drive-এ file "view" করতে পারা কিন্তু "delete" করতে না পারা</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON TABLE -->
+<section class="container mb-5">
+  <p class="eyebrow mb-2">Quick reference</p>
+  <h2 class="display fw-semibold mb-4" style="font-size:1.6rem;">Side-by-side comparison</h2>
+  <div class="table-wrap">
+    <table class="cmp">
+      <thead>
+        <tr>
+          <th style="width:18%;">বিষয়</th>
+          <th class="col-auth">Authentication</th>
+          <th class="col-authz">Authorization</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">QUESTION</td>
+          <td>Who are you?</td>
+          <td>What are you allowed to do?</td>
+        </tr>
+        <tr>
+          <td class="label">ORDER</td>
+          <td>প্রথমে ঘটে</td>
+          <td>Authentication-এর পরে ঘটে</td>
+        </tr>
+        <tr>
+          <td class="label">INPUT</td>
+          <td>Username/email + password, OTP, biometric</td>
+          <td>User role, permission set, resource policy</td>
+        </tr>
+        <tr>
+          <td class="label">HTTP STATUS</td>
+          <td><span class="status-chip status-401">401</span> Unauthorized</td>
+          <td><span class="status-chip status-403">403</span> Forbidden</td>
+        </tr>
+        <tr>
+          <td class="label">MECHANISM</td>
+          <td>Password hashing, OTP, biometrics, SSO, MFA</td>
+          <td>RBAC, ABAC, ACL, OAuth scopes, policy engine</td>
+        </tr>
+        <tr>
+          <td class="label">CHANGE FREQUENCY</td>
+          <td>একবার verify হলে session/token জুড়ে থাকে</td>
+          <td>প্রতিটা request/action-এ আলাদা করে check হয়</td>
+        </tr>
+        <tr>
+          <td class="label">REAL-WORLD ANALOGY</td>
+          <td>Airport-এ passport check করা</td>
+          <td>Boarding pass দেখে কোন gate দিয়ে যাবে ঠিক করা</td>
+        </tr>
+        <tr>
+          <td class="label">TECH EXAMPLE</td>
+          <td>Login form, Firebase Auth, Passport.js, OTP verify API</td>
+          <td>Spring Security roles, Laravel Gates/Policies, JWT claims-based access</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- QUICK LINK TO SIMULATOR TAB -->
+<div class="container mb-5">
+  <div class="p-3 text-center d-flex align-items-center justify-content-center flex-wrap gap-3" style="background:linear-gradient(135deg, rgba(76,141,255,.08), rgba(242,177,52,.05)); border:1px dashed var(--auth-blue-dim); border-radius:14px;">
+    <span style="font-size:1.2rem;">🏨💡</span>
+    <span class="muted" style="font-size:.92rem;">রিয়েল-ওয়ার্ল্ড হোটেল চেক-ইন অ্যানালজি ও লাইভ এক্সেস ফ্লো দেখতে চান?</span>
+    <button class="btn btn-sm btn-outline-light mono switch-to-sim-btn px-3" style="border-radius:8px; border-color:var(--auth-blue); color:#fff;">
+      🏨 লাইভ সিমুলেটর ট্যাবে যান ➡️
+    </button>
+  </div>
+</div>
+
+<!-- TECHNICAL DEEP DIVE -->
+<section class="container mb-5">
+  <p class="eyebrow mb-2">Advanced · developer view</p>
+  <h2 class="display fw-semibold mb-4" style="font-size:1.6rem;">Request flow-এ কীভাবে কাজ করে</h2>
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <p class="mono muted mb-2" style="font-size:.78rem;">// Step 1 — Authentication: login → token issue</p>
+      <div class="code-block"><span class="c-cmt">POST /api/login</span>
+{
+  <span class="c-key">"email"</span>: <span class="c-str">"user@example.com"</span>,
+  <span class="c-key">"password"</span>: <span class="c-str">"••••••••"</span>
+}
+
+<span class="c-cmt">// server verifies identity → issues token</span>
+200 OK
+{ <span class="c-key">"token"</span>: <span class="c-str">"eyJhbGciOi..."</span> }</div>
+    </div>
+    <div class="col-lg-6">
+      <p class="mono muted mb-2" style="font-size:.78rem;">// Step 2 — Authorization: token দিয়ে permission check</p>
+      <div class="code-block"><span class="c-cmt">DELETE /api/projects/42</span>
+Authorization: Bearer eyJhbGciOi...
+
+<span class="c-cmt">// server checks role/permission for this user</span>
+403 Forbidden
+{ <span class="c-key">"error"</span>: <span class="c-str">"insufficient_permissions"</span> }</div>
+    </div>
+  </div>
+  <p class="muted mt-3 mb-0" style="font-size:.88rem;">
+    লক্ষ্য করো — token valid থাকা মানে user authenticated, কিন্তু তার মানে এই না যে সে সব কাজ করতে পারবে।
+    এই যে দ্বিতীয় check, এটাই authorization layer — RBAC (role-based), ABAC (attribute-based), অথবা OAuth 2.0 scope দিয়ে implement করা হয়।
+  </p>
+</section>
+
+<!-- TIPS -->
+<section class="container mb-5">
+  <p class="eyebrow mb-2">Common mistakes</p>
+  <h2 class="display fw-semibold mb-4" style="font-size:1.6rem;">Beginner থেকে advanced — যা মনে রাখা দরকার</h2>
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">01</p>
+        <p class="mb-0" style="font-size:.92rem;">401 আর 403 গুলিয়ে ফেলা — 401 মানে "তুমি কে তা জানি না", 403 মানে "তোমাকে চিনি কিন্তু access নেই"।</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">02</p>
+        <p class="mb-0" style="font-size:.92rem;">শুধু authentication দিয়ে security complete মনে করা — authorization ছাড়া logged-in যেকোনো user সব কিছু করতে পারবে।</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">03</p>
+        <p class="mb-0" style="font-size:.92rem;">Frontend-এ শুধু button hide করে authorization "implement" করা — real check সবসময় backend/server-এ হতে হবে।</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">04</p>
+        <p class="mb-0" style="font-size:.92rem;">OAuth 2.0-কে authentication protocol ভাবা — এটা মূলত authorization delegation-এর জন্য বানানো (OpenID Connect হচ্ছে authentication layer যেটা OAuth-এর উপর বসে)।</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">05</p>
+        <p class="mb-0" style="font-size:.92rem;">প্রতিটা sensitive action-এ আলাদাভাবে authorization check না করা — একবার check করেই সব জায়গায় trust করা risky।</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="tip-card">
+        <p class="tip-num mb-1">06</p>
+        <p class="mb-0" style="font-size:.92rem;">Session/token expire হওয়ার পরও পুরনো permission cache-এর উপর নির্ভর করা — role change হলে token/session revalidate করা জরুরি।</p>
+      </div>
+    </div>
+  </div>
+</section>
+</div><!-- /view-guide -->
+
+<!-- TAB 2: SIMULATOR VIEW -->
+<div id="view-sim" class="tab-pane-view d-none py-4">
+  <div class="container">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+      <button class="btn btn-sm btn-outline-secondary mono switch-to-guide-btn" style="border-radius:8px; font-size:.82rem;">
+        ⬅️ মূল গাইড ও থিওরিতে ফিরে যান
+      </button>
+      <span class="mono muted" style="font-size:.78rem;">// Dedicated Interactive Workspace</span>
+    </div>
+
+    <!-- REAL-WORLD ANALOGY CARDS (MOVED INTO SIMULATOR TAB) -->
+    <div class="mb-4 pb-2">
+      <p class="eyebrow mb-1">Real-world analogy</p>
+      <h2 class="display fw-semibold mb-3" style="font-size:1.5rem;">Hotel check-in দিয়ে বুঝি</h2>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="analogy-card h-100">
+            <div class="analogy-icon mb-2">🧾</div>
+            <h5 class="display fw-semibold" style="color:var(--auth-blue);">Check-in counter = Authentication</h5>
+            <p class="muted mb-0" style="font-size:.9rem;">
+              Reception-এ ID card দেখিয়ে প্রমাণ করছো তুমি সেই ব্যক্তি যার নামে booking করা হয়েছে।
+              এটা identity verify করার ধাপ — এখানেই তোমার "কে তুমি" confirm হয়।
+            </p>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="analogy-card h-100">
+            <div class="analogy-icon mb-2">🚪</div>
+            <h5 class="display fw-semibold" style="color:var(--authz-gold);">Key card = Authorization</h5>
+            <p class="muted mb-0" style="font-size:.9rem;">
+              চেক-ইনের পর যে key card পাও, সেটা শুধু তোমার নির্দিষ্ট room, gym আর pool-এ কাজ করে —
+              অন্য কারো room-এ না। এটা define করে তুমি কোন কোন জায়গায় ঢুকতে পারবে।
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DYNAMIC HOTEL VISUAL SIMULATOR -->
+    <div class="hotel-sim-wrap mt-0">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-3" style="border-bottom:1px solid var(--line);">
+        <div>
+          <span class="eyebrow d-block mb-1 text-uppercase" style="color:var(--auth-blue);">Interactive · Dynamic Flow · Auto-Play</span>
+          <h3 class="display fw-bold mb-0" style="font-size:1.45rem;">🏨 লাইভ ভিজ্যুয়াল সিমুলেটর: হোটেল চেক-ইন ও দরজা এক্সেস</h3>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge-pill d-flex align-items-center bg-dark" id="simStatusPill">
+            <span class="pulse-indicator" id="simPulseDot"></span> <span id="simStatusText">অটো-সিমুলেশন চলছে...</span>
+          </span>
+          <button id="toggleAutoPlayBtn" class="btn btn-sm btn-outline-light mono" style="font-size:.78rem;">⏸️ Pause Auto</button>
+          <button id="resetSimBtn" class="btn btn-sm btn-outline-light mono" style="font-size:.78rem;">🔄 Re-run</button>
+        </div>
+      </div>
+
+      <!-- PERSONA SELECTOR -->
+      <div class="mb-4">
+        <p class="mono muted mb-2" style="font-size:.8rem;">// যেকোনো অতিথি বা চরিত্র বেছে নিয়ে রিয়েল-টাইম AuthN ও AuthZ প্রসেস দেখুন:</p>
+        <div class="d-flex flex-wrap gap-2" id="personaButtons">
+          <div class="sim-persona-btn active" data-persona="vip">👑 ভিআইপি অতিথি (Sadia)</div>
+          <div class="sim-persona-btn" data-persona="standard">👨‍💼 সাধারণ অতিথি (Rahim)</div>
+          <div class="sim-persona-btn" data-persona="staff">👨‍🍳 হোটেল স্টাফ (Chef Karim)</div>
+          <div class="sim-persona-btn" data-persona="intruder">🦹 অপরিচিত ব্যক্তি (Unregistered)</div>
+        </div>
+      </div>
+
+      <!-- 3-STAGE VISUAL GRID -->
+      <div class="row g-3 mb-4">
+        <!-- STAGE 1: AUTHENTICATION -->
+        <div class="col-lg-3 col-md-6">
+          <div class="sim-stage-box" id="stage1Box">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="eyebrow" style="color:var(--auth-blue);">Step 1: AuthN</span>
+              <span class="badge bg-dark border border-secondary" style="font-size:0.65rem;">চেক-ইন কাউন্টার</span>
+            </div>
+            <div class="text-center my-3">
+              <div id="simAvatar" style="font-size:3.5rem; transition:transform .3s ease;">👑</div>
+              <h5 id="simGuestName" class="display fw-bold mt-2 mb-1" style="font-size:1.1rem;">ভিআইপি অতিথি (Sadia)</h5>
+              <p id="simGuestDesc" class="muted mb-0" style="font-size:.78rem;">রুম ও জিমের পাশাপাশি ভিআইপি লাউঞ্জে প্রবেশ করতে পারবেন।</p>
+            </div>
+            <div class="mt-3 text-center">
+              <div id="simAuthnBadge" class="sim-status-badge status-401 w-100 py-2">⏳ আইডি যাচাই হচ্ছে...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAGE 2: KEYCARD ISSUANCE -->
+        <div class="col-lg-3 col-md-6">
+          <div class="sim-stage-box" id="stage2Box">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="eyebrow" style="color:var(--authz-gold);">Step 2: Token Issue</span>
+              <span class="badge bg-dark border border-secondary" style="font-size:0.65rem;">Keycard (JWT)</span>
+            </div>
+            <div id="simKeycardContainer" class="my-3">
+              <div class="sim-keycard">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span style="font-size:1.4rem;">🗝️</span>
+                  <span id="simKeycardRole" class="badge" style="background:rgba(242,177,52,.2); color:var(--authz-gold); border:1px solid var(--authz-gold);">VIP_GUEST</span>
+                </div>
+                <div class="mono" style="font-size:.8rem; color:#E2E8F0;">GUEST ID: <span id="simKeycardId" style="color:var(--auth-blue);">#VIP-9042</span></div>
+                <div class="mono mt-2" style="font-size:.75rem; color:var(--muted);">PERMISSIONS:</div>
+                <div id="simKeycardPerms" class="mono text-truncate" style="font-size:.72rem; color:#9EE6A0;">[room101, gym, lounge]</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <span id="simTokenStatus" class="mono muted" style="font-size:.75rem;">✔ টোকেন জেনারেট হয়েছে</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAGE 3: MULTIPLE DOORS ACCESS -->
+        <div class="col-lg-6 col-md-12">
+          <div class="sim-stage-box" id="stage3Box">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <span class="eyebrow" style="color:var(--good);">Step 3: AuthZ (Door Verification)</span>
+              <span class="mono muted" style="font-size:.72rem;" id="simDoorProgressText">দরজা চেক হচ্ছে...</span>
+            </div>
+            <div class="row g-2">
+              <div class="col-6 col-sm-3">
+                <div class="sim-door" id="door-room101">
+                  <div>
+                    <div class="door-icon" id="door-icon-room101">🔒</div>
+                    <div class="fw-semibold display" style="font-size:.9rem;">🛏️ Room 101</div>
+                    <div class="muted mono" style="font-size:.68rem;">Guest Room</div>
+                  </div>
+                  <span class="sim-door-chip chip-locked" id="door-chip-room101">🔒 Locked</span>
+                </div>
+              </div>
+              <div class="col-6 col-sm-3">
+                <div class="sim-door" id="door-gym">
+                  <div>
+                    <div class="door-icon" id="door-icon-gym">🔒</div>
+                    <div class="fw-semibold display" style="font-size:.9rem;">🏋️ Fitness Gym</div>
+                    <div class="muted mono" style="font-size:.68rem;">Shared Area</div>
+                  </div>
+                  <span class="sim-door-chip chip-locked" id="door-chip-gym">🔒 Locked</span>
+                </div>
+              </div>
+              <div class="col-6 col-sm-3">
+                <div class="sim-door" id="door-lounge">
+                  <div>
+                    <div class="door-icon" id="door-icon-lounge">🔒</div>
+                    <div class="fw-semibold display" style="font-size:.9rem;">🍸 VIP Lounge</div>
+                    <div class="muted mono" style="font-size:.68rem;">VIP Only</div>
+                  </div>
+                  <span class="sim-door-chip chip-locked" id="door-chip-lounge">🔒 Locked</span>
+                </div>
+              </div>
+              <div class="col-6 col-sm-3">
+                <div class="sim-door" id="door-kitchen">
+                  <div>
+                    <div class="door-icon" id="door-icon-kitchen">🔒</div>
+                    <div class="fw-semibold display" style="font-size:.9rem;">🍳 Kitchen</div>
+                    <div class="muted mono" style="font-size:.68rem;">Staff Only</div>
+                  </div>
+                  <span class="sim-door-chip chip-locked" id="door-chip-kitchen">🔒 Locked</span>
+                </div>
+              </div>
+            </div>
+            <div class="sim-progress-bar">
+              <div class="sim-progress-fill" id="simProgressFill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE LOG CONSOLE -->
+      <div>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="eyebrow" style="color:#A5B4FC;">💻 Live System Security Logs (রিয়েল-টাইম সিকিউরিটি লগ)</span>
+          <button id="clearLogsBtn" class="btn btn-link btn-sm p-0 text-decoration-none muted mono" style="font-size:.75rem;">Clear Console ✕</button>
+        </div>
+        <div class="sim-log-console" id="simLogConsole">
+          <div class="sim-log-item log-info">[SYSTEM INIT] 🏨 Hotel Security Access Simulator লোড হয়েছে। রিয়েল-টাইম অটো-সিমুলেশন শুরু হচ্ছে...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="container text-center py-4" style="border-top:1px solid var(--line);">
+  <p class="mono muted mb-0" style="font-size:.75rem;">
+    AuthN verifies identity · AuthZ verifies permission · both দরকার, একটা আরেকটার substitute না।
+  </p>
+</footer>
+
+<script>
+(function() {
+  // Tab navigation switching
+  const tabBtns = document.querySelectorAll('.nav-tab-btn');
+  const viewGuide = document.getElementById('view-guide');
+  const viewSim = document.getElementById('view-sim');
+
+  function switchTab(targetId) {
+    tabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-target') === targetId);
+    });
+    if (targetId === 'view-guide') {
+      viewGuide.classList.remove('d-none');
+      viewSim.classList.add('d-none');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (targetId === 'view-sim') {
+      viewGuide.classList.add('d-none');
+      viewSim.classList.remove('d-none');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Re-trigger simulation for current persona when opening tab
+      runSimulationForPersona(personas[currentPersonaIndex]);
+    }
+  }
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchTab(btn.getAttribute('data-target'));
+    });
+  });
+
+  document.querySelectorAll('.switch-to-sim-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab('view-sim'));
+  });
+
+  document.querySelectorAll('.switch-to-guide-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab('view-guide'));
+  });
+
+  const personas = [
+    {
+      id: 'vip',
+      name: 'ভিআইপি অতিথি (Sadia)',
+      role: 'VIP Guest',
+      avatar: '👑',
+      authnSuccess: true,
+      authnStatus: '✅ 200 OK (Identity Verified)',
+      keycardRole: 'VIP_GUEST',
+      keycardId: '#VIP-9042',
+      permissions: ['room101', 'gym', 'lounge'],
+      desc: 'রুম ও জিমের পাশাপাশি ভিআইপি লাউঞ্জে প্রবেশ করতে পারবেন।'
+    },
+    {
+      id: 'standard',
+      name: 'সাধারণ অতিথি (Rahim)',
+      role: 'Standard Guest',
+      avatar: '👨‍💼',
+      authnSuccess: true,
+      authnStatus: '✅ 200 OK (Identity Verified)',
+      keycardRole: 'GUEST',
+      keycardId: '#STD-4102',
+      permissions: ['room101', 'gym'],
+      desc: 'শুধুমাত্র নিজের রুম এবং জিম ব্যবহার করতে পারবেন।'
+    },
+    {
+      id: 'staff',
+      name: 'হোটেল স্টাফ (Chef Karim)',
+      role: 'Hotel Staff',
+      avatar: '👨‍🍳',
+      authnSuccess: true,
+      authnStatus: '✅ 200 OK (Identity Verified)',
+      keycardRole: 'STAFF',
+      keycardId: '#STF-0071',
+      permissions: ['gym', 'kitchen'],
+      desc: 'কিচেন ও স্টাফ এরিয়ায় প্রবেশ করতে পারবেন, কিন্তু গেস্ট রুমে না।'
+    },
+    {
+      id: 'intruder',
+      name: 'অপরিচিত ব্যক্তি (Stranger)',
+      role: 'Unregistered',
+      avatar: '🦹',
+      authnSuccess: false,
+      authnStatus: '❌ 401 Unauthorized (Denied)',
+      keycardRole: 'NONE (No Token)',
+      keycardId: '#INVALID',
+      permissions: [],
+      desc: 'হোটেলের ডাটাবেজে নাম নেই! রিসেপশন থেকেই চেক-ইন বাতিল।'
+    }
+  ];
+
+  const doors = [
+    { id: 'room101', name: '🛏️ Room 101', req: 'room101' },
+    { id: 'gym', name: '🏋️ Fitness Gym', req: 'gym' },
+    { id: 'lounge', name: '🍸 VIP Lounge', req: 'lounge' },
+    { id: 'kitchen', name: '🍳 Kitchen', req: 'kitchen' }
+  ];
+
+  let currentPersonaIndex = 0;
+  let autoPlay = true;
+  let simTimeoutIds = [];
+
+  const personaBtns = document.querySelectorAll('.sim-persona-btn');
+  const simAvatar = document.getElementById('simAvatar');
+  const simGuestName = document.getElementById('simGuestName');
+  const simGuestDesc = document.getElementById('simGuestDesc');
+  const simAuthnBadge = document.getElementById('simAuthnBadge');
+  const simKeycardRole = document.getElementById('simKeycardRole');
+  const simKeycardId = document.getElementById('simKeycardId');
+  const simKeycardPerms = document.getElementById('simKeycardPerms');
+  const simTokenStatus = document.getElementById('simTokenStatus');
+  const simKeycardContainer = document.getElementById('simKeycardContainer');
+  const simDoorProgressText = document.getElementById('simDoorProgressText');
+  const simProgressFill = document.getElementById('simProgressFill');
+  const simLogConsole = document.getElementById('simLogConsole');
+  const toggleAutoPlayBtn = document.getElementById('toggleAutoPlayBtn');
+  const resetSimBtn = document.getElementById('resetSimBtn');
+  const clearLogsBtn = document.getElementById('clearLogsBtn');
+  const simPulseDot = document.getElementById('simPulseDot');
+  const simStatusText = document.getElementById('simStatusText');
+  const stage1Box = document.getElementById('stage1Box');
+  const stage2Box = document.getElementById('stage2Box');
+  const stage3Box = document.getElementById('stage3Box');
+
+  function clearSimTimeouts() {
+    simTimeoutIds.forEach(id => clearTimeout(id));
+    simTimeoutIds = [];
+  }
+
+  function addLog(msg, type = 'log-info') {
+    const now = new Date();
+    const timeStr = now.toTimeString().split(' ')[0];
+    const div = document.createElement('div');
+    div.className = `sim-log-item ${type}`;
+    div.innerHTML = `<span style="color:var(--muted)">[${timeStr}]</span> ${msg}`;
+    simLogConsole.appendChild(div);
+    simLogConsole.scrollTop = simLogConsole.scrollHeight;
+  }
+
+  function resetDoorsUI() {
+    doors.forEach(door => {
+      const doorEl = document.getElementById(`door-${door.id}`);
+      const iconEl = document.getElementById(`door-icon-${door.id}`);
+      const chipEl = document.getElementById(`door-chip-${door.id}`);
+      if (doorEl && iconEl && chipEl) {
+        doorEl.className = 'sim-door';
+        iconEl.textContent = '🔒';
+        chipEl.className = 'sim-door-chip chip-locked';
+        chipEl.textContent = '🔒 Locked';
+      }
+    });
+    simProgressFill.style.width = '0%';
+    stage1Box.classList.remove('active-stage', 'active-stage-authz');
+    stage2Box.classList.remove('active-stage', 'active-stage-authz');
+    stage3Box.classList.remove('active-stage', 'active-stage-authz');
+  }
+
+  function runSimulationForPersona(persona) {
+    clearSimTimeouts();
+    resetDoorsUI();
+
+    // Update buttons
+    personaBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-persona') === persona.id);
+    });
+
+    // Step 0: Initial Arrival
+    simAvatar.textContent = persona.avatar;
+    simAvatar.style.transform = 'scale(1.2)';
+    setTimeout(() => simAvatar.style.transform = 'scale(1)', 300);
+    simGuestName.textContent = persona.name;
+    simGuestDesc.textContent = persona.desc;
+    
+    simAuthnBadge.className = 'sim-status-badge w-100 py-2';
+    simAuthnBadge.style.background = 'rgba(138,147,170,.15)';
+    simAuthnBadge.style.color = 'var(--muted)';
+    simAuthnBadge.style.border = '1px solid var(--line)';
+    simAuthnBadge.textContent = '⏳ রিসেপশনে আইডি যাচাই হচ্ছে...';
+
+    simKeycardContainer.style.opacity = '0.3';
+    simKeycardRole.textContent = 'WAITING...';
+    simKeycardId.textContent = '---';
+    simKeycardPerms.textContent = '---';
+    simTokenStatus.textContent = '⏳ অপেক্ষা করা হচ্ছে...';
+    simDoorProgressText.textContent = 'অপেক্ষা করা হচ্ছে...';
+
+    stage1Box.classList.add('active-stage');
+    addLog(`👤 <strong>${persona.name}</strong> রিসেপশন কাউন্টারে আসলেন। Check-in (AuthN) শুরু হলো...`, 'log-info');
+
+    // Step 1: Authentication Check
+    simTimeoutIds.push(setTimeout(() => {
+      if (!persona.authnSuccess) {
+        // AuthN Failed (401)
+        simAuthnBadge.className = 'sim-status-badge status-403 w-100 py-2';
+        simAuthnBadge.style.background = 'rgba(255,107,107,.18)';
+        simAuthnBadge.style.color = 'var(--bad)';
+        simAuthnBadge.style.border = '1px solid var(--bad)';
+        simAuthnBadge.textContent = persona.authnStatus;
+
+        simTokenStatus.textContent = '🚫 টোকেন ইস্যু বাতিল (401)';
+        simDoorProgressText.textContent = 'প্রবেশাধিকার বাতিল';
+        
+        doors.forEach(door => {
+          const chipEl = document.getElementById(`door-chip-${door.id}`);
+          if (chipEl) {
+            chipEl.className = 'sim-door-chip chip-denied';
+            chipEl.textContent = '🚫 401 AuthN Needed';
+          }
+        });
+
+        addLog(`🔴 <strong>Authentication Failed (401 Unauthorized):</strong> আপনার পরিচয় ডাটাবেজে পাওয়া যায়নি! আপনি হোটেলে প্রবেশ করতে পারবেন না।`, 'log-authz-fail');
+        addLog(`💡 <em>Rule: Authentication ছাড়া Authorization চেক করার প্রশ্নই আসে না।</em>`, 'log-warn');
+
+        if (autoPlay) {
+          simTimeoutIds.push(setTimeout(nextPersona, 5000));
+        }
+        return;
+      }
+
+      // AuthN Success (200 OK)
+      simAuthnBadge.className = 'sim-status-badge status-401 w-100 py-2';
+      simAuthnBadge.style.background = 'rgba(62,207,142,.18)';
+      simAuthnBadge.style.color = 'var(--good)';
+      simAuthnBadge.style.border = '1px solid var(--good)';
+      simAuthnBadge.textContent = persona.authnStatus;
+
+      addLog(`🔐 <strong>AuthN Success (200 OK):</strong> পরিচয় যাচাই সম্পন্ন! অতিথি বৈধ।`, 'log-auth');
+
+      // Step 2: Issue Keycard
+      simTimeoutIds.push(setTimeout(() => {
+        stage1Box.classList.remove('active-stage');
+        stage2Box.classList.add('active-stage-authz');
+        simKeycardContainer.style.opacity = '1';
+        simKeycardRole.textContent = persona.keycardRole;
+        simKeycardId.textContent = persona.keycardId;
+        simKeycardPerms.textContent = `[${persona.permissions.join(', ')}]`;
+        simTokenStatus.textContent = '✔ Keycard (JWT Token) ইস্যু হয়েছে';
+        simDoorProgressText.textContent = 'দরজাগুলোতে এক্সেস চেক চলছে...';
+
+        addLog(`🗝️ <strong>Keycard Issued:</strong> অতিথিকে "<strong>${persona.keycardRole}</strong>" রোল এবং এক্সেস স্কোপ [<strong>${persona.permissions.join(', ')}</strong>] দেওয়া হলো।`, 'log-info');
+
+        // Step 3: Check Doors sequentially
+        simTimeoutIds.push(setTimeout(() => {
+          stage2Box.classList.remove('active-stage-authz');
+          stage3Box.classList.add('active-stage');
+          checkDoorsSequentially(persona, 0);
+        }, 1200));
+
+      }, 1000));
+
+    }, 1200));
+  }
+
+  function checkDoorsSequentially(persona, doorIndex) {
+    if (doorIndex >= doors.length) {
+      simProgressFill.style.width = '100%';
+      simDoorProgressText.textContent = '✔ সব দরজার চেক সম্পন্ন!';
+      addLog(`✨ <strong>সিমুলেশন রাউন্ড সম্পন্ন!</strong> ${persona.name}-এর জন্য নির্দিষ্ট দরজাগুলোতে প্রবেশাধিকার নিশ্চিত করা হয়েছে।`, 'log-authz-success');
+      
+      if (autoPlay) {
+        simTimeoutIds.push(setTimeout(nextPersona, 4500));
+      }
+      return;
+    }
+
+    const door = doors[doorIndex];
+    const progressPct = ((doorIndex + 1) / doors.length) * 100;
+    simProgressFill.style.width = `${progressPct}%`;
+
+    const doorEl = document.getElementById(`door-${door.id}`);
+    const iconEl = document.getElementById(`door-icon-${door.id}`);
+    const chipEl = document.getElementById(`door-chip-${door.id}`);
+
+    const isAllowed = persona.permissions.includes(door.req);
+
+    if (isAllowed) {
+      if (doorEl) doorEl.className = 'sim-door door-open';
+      if (iconEl) iconEl.textContent = '🔓';
+      if (chipEl) {
+        chipEl.className = 'sim-door-chip chip-granted';
+        chipEl.textContent = '🟢 200 OK (Granted)';
+      }
+      addLog(`🚪 <strong>${door.name}:</strong> 🟢 <strong>AuthZ Success!</strong> Keycard-এ অনুমতি আছে → দরজা খুলে গেল! (Access Granted)`, 'log-authz-success');
+    } else {
+      if (doorEl) {
+        doorEl.className = 'sim-door door-denied';
+        setTimeout(() => { if (doorEl) doorEl.classList.remove('door-denied'); }, 600);
+      }
+      if (iconEl) iconEl.textContent = '🔒';
+      if (chipEl) {
+        chipEl.className = 'sim-door-chip chip-denied';
+        chipEl.textContent = '🔴 403 Forbidden';
+      }
+      addLog(`🚪 <strong>${door.name}:</strong> 🔴 <strong>AuthZ Failed (403 Forbidden):</strong> Keycard-এ এই দরজায় ঢোকার অনুমতি নেই! দরজা বন্ধ থাকল।`, 'log-authz-fail');
+    }
+
+    simTimeoutIds.push(setTimeout(() => {
+      checkDoorsSequentially(persona, doorIndex + 1);
+    }, 1000));
+  }
+
+  function nextPersona() {
+    currentPersonaIndex = (currentPersonaIndex + 1) % personas.length;
+    runSimulationForPersona(personas[currentPersonaIndex]);
+  }
+
+  personaBtns.forEach((btn, idx) => {
+    btn.addEventListener('click', () => {
+      const pId = btn.getAttribute('data-persona');
+      const foundIdx = personas.findIndex(p => p.id === pId);
+      if (foundIdx !== -1) {
+        currentPersonaIndex = foundIdx;
+        runSimulationForPersona(personas[currentPersonaIndex]);
+      }
+    });
+  });
+
+  toggleAutoPlayBtn.addEventListener('click', () => {
+    autoPlay = !autoPlay;
+    if (autoPlay) {
+      toggleAutoPlayBtn.textContent = '⏸️ Pause Auto';
+      toggleAutoPlayBtn.classList.remove('btn-warning');
+      toggleAutoPlayBtn.classList.add('btn-outline-light');
+      simPulseDot.style.display = 'inline-block';
+      simStatusText.textContent = 'অটো-সিমুলেশন চলছে...';
+      addLog(`▶️ অটো-সিমুলেশন চালু করা হলো।`, 'log-info');
+      nextPersona();
+    } else {
+      toggleAutoPlayBtn.textContent = '▶️ Resume Auto';
+      toggleAutoPlayBtn.classList.remove('btn-outline-light');
+      toggleAutoPlayBtn.classList.add('btn-warning');
+      simPulseDot.style.display = 'none';
+      simStatusText.textContent = 'অটো-সিমুলেশন পজ করা আছে';
+      clearSimTimeouts();
+      addLog(`⏸️ অটো-সিমুলেশন পজ করা হয়েছে। যেকোনো বাটনে ক্লিক করে ম্যানুয়ালি টেস্ট করুন।`, 'log-warn');
+    }
+  });
+
+  resetSimBtn.addEventListener('click', () => {
+    addLog(`🔄 সিমুলেশন রিস্টার্ট করা হলো।`, 'log-info');
+    runSimulationForPersona(personas[currentPersonaIndex]);
+  });
+
+  clearLogsBtn.addEventListener('click', () => {
+    simLogConsole.innerHTML = '<div class="sim-log-item log-info">[SYSTEM LOGS CLEARED] নতুন ইভেন্টের অপেক্ষা করা হচ্ছে...</div>';
+  });
+
+  // Start initial simulation after page load
+  setTimeout(() => {
+    runSimulationForPersona(personas[0]);
+  }, 600);
+
+})();
+</script>
+</body>
+</html>
